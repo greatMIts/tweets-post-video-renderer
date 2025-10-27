@@ -1,16 +1,18 @@
 #!/usr/bin/env node
 
 /**
- * Local Testing Script for Video Generation API
+ * Remote Testing Script for Video Generation API
  *
- * This script tests the video generation API by:
+ * This script tests the video generation API on a remote server by:
  * 1. Creating a signed request to generate a video
  * 2. Polling for job completion
  * 3. Downloading the generated video
  *
  * Usage:
- *   node scripts/test-local.js
- *   npm test
+ *   node scripts/test-remote.js <API_URL>
+ *   node scripts/test-remote.js https://your-app.railway.app
+ *
+ * The HMAC_SECRET must be set in your .env file and match the remote server.
  */
 
 const axios = require('axios');
@@ -19,12 +21,14 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
+// Get URL from command line argument
+const REMOTE_URL = process.argv[2];
+
 // Configuration
 const HMAC_SECRET = process.env.HMAC_SECRET;
-const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 const POLL_INTERVAL_MS = 5000; // 5 seconds
 const MAX_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
-const OUTPUT_FILE = path.join(__dirname, '..', 'test-output.mp4');
+const OUTPUT_FILE = path.join(__dirname, '..', 'test-output-remote.mp4');
 
 // ANSI color codes for better output
 const colors = {
@@ -75,6 +79,34 @@ function logProgress(message, percentage) {
 }
 
 /**
+ * Validates and normalizes the URL
+ *
+ * @param {string} url - URL to validate
+ * @returns {string} Normalized URL
+ */
+function validateUrl(url) {
+  if (!url) {
+    throw new Error('URL is required');
+  }
+
+  // Remove trailing slash
+  url = url.replace(/\/$/, '');
+
+  // Ensure it starts with http:// or https://
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    url = 'https://' + url;
+  }
+
+  // Validate URL format
+  try {
+    new URL(url);
+    return url;
+  } catch (error) {
+    throw new Error(`Invalid URL format: ${url}`);
+  }
+}
+
+/**
  * Generates an HMAC-SHA256 signature for request authentication
  *
  * @param {number} timestamp - Unix timestamp in seconds
@@ -106,7 +138,7 @@ function generateSignature(timestamp, body) {
  */
 async function makeAuthenticatedRequest(method, endpoint, body = null) {
   const timestamp = Math.floor(Date.now() / 1000);
-  const url = `${BASE_URL}${endpoint}`;
+  const url = `${REMOTE_URL}${endpoint}`;
 
   const config = {
     method,
@@ -114,7 +146,8 @@ async function makeAuthenticatedRequest(method, endpoint, body = null) {
     headers: {
       'Content-Type': 'application/json',
       'X-Timestamp': timestamp.toString()
-    }
+    },
+    timeout: 30000 // 30 second timeout
   };
 
   if (body) {
@@ -134,7 +167,7 @@ async function makeAuthenticatedRequest(method, endpoint, body = null) {
       );
     } else if (error.request) {
       // Request made but no response
-      throw new Error('Network Error: No response from server. Is the API running?');
+      throw new Error('Network Error: No response from server. Is the API accessible?');
     } else {
       // Error setting up request
       throw new Error(`Request Error: ${error.message}`);
@@ -199,7 +232,8 @@ async function downloadFile(url, outputPath) {
   const response = await axios({
     method: 'GET',
     url,
-    responseType: 'stream'
+    responseType: 'stream',
+    timeout: 60000 // 60 second timeout for download
   });
 
   const writer = fs.createWriteStream(outputPath);
@@ -242,6 +276,28 @@ function formatBytes(bytes) {
 }
 
 /**
+ * Tests the health endpoint
+ *
+ * @returns {Promise<Object>} Health check response
+ */
+async function testHealthEndpoint() {
+  try {
+    const response = await axios.get(`${REMOTE_URL}/health`, { timeout: 10000 });
+    return response.data;
+  } catch (error) {
+    if (error.response) {
+      throw new Error(`Health check failed with status ${error.response.status}`);
+    } else if (error.code === 'ECONNREFUSED') {
+      throw new Error('Connection refused. Is the server running?');
+    } else if (error.code === 'ETIMEDOUT') {
+      throw new Error('Connection timeout. Server may be down or unreachable.');
+    } else {
+      throw new Error(`Health check failed: ${error.message}`);
+    }
+  }
+}
+
+/**
  * Main test function
  */
 async function testVideoGeneration() {
@@ -249,30 +305,57 @@ async function testVideoGeneration() {
 
   // Print header
   log('\n' + '='.repeat(60), colors.cyan);
-  log('  Video Generation API - Local Test', colors.bright);
+  log('  Video Generation API - Remote Server Test', colors.bright);
   log('='.repeat(60) + '\n', colors.cyan);
 
   try {
+    // Validate URL argument
+    if (!REMOTE_URL) {
+      log('\n' + colors.red + 'Error: No URL provided' + colors.reset + '\n');
+      log('Usage:');
+      log('  node scripts/test-remote.js <API_URL>');
+      log('  node scripts/test-remote.js https://your-app.railway.app\n');
+      log('Examples:');
+      log('  node scripts/test-remote.js https://my-api.railway.app');
+      log('  node scripts/test-remote.js http://localhost:3000');
+      log('  node scripts/test-remote.js my-api.railway.app  ' + colors.dim + '(will add https://)' + colors.reset);
+      log('');
+      process.exit(1);
+    }
+
     // Validate configuration
-    logStep('1/5', 'Validating configuration');
+    logStep('1/6', 'Validating configuration');
+
+    const baseUrl = validateUrl(REMOTE_URL);
+    logSuccess(`Remote URL: ${baseUrl}`);
 
     if (!HMAC_SECRET) {
       throw new Error('HMAC_SECRET not found in environment variables. Please create a .env file.');
     }
 
-    logInfo(`Base URL: ${BASE_URL}`);
     logInfo(`HMAC Secret: ${HMAC_SECRET.substring(0, 10)}...`);
     logSuccess('Configuration valid\n');
 
+    // Test health endpoint
+    logStep('2/6', 'Testing /health endpoint');
+
+    const health = await testHealthEndpoint();
+    logSuccess('Server is healthy');
+    logInfo(`Service: ${health.service}`);
+    logInfo(`Version: ${health.version}`);
+    logInfo(`Uptime: ${Math.round(health.uptime)}s`);
+    logInfo(`Worker: ${health.worker.running ? 'Running' : 'Stopped'} (${health.worker.currentJobs}/${health.worker.maxConcurrentJobs} jobs)`);
+    logInfo(`Jobs: ${health.jobs.pending} pending, ${health.jobs.processing} processing, ${health.jobs.completed} completed, ${health.jobs.failed} failed\n`);
+
     // Create request body with sample tweet data
-    logStep('2/5', 'Creating video generation request');
+    logStep('3/6', 'Creating video generation request');
 
     const requestBody = {
       theme: 'dark',
       profilePhotoUrl: 'https://pbs.twimg.com/profile_images/1590968738358079488/IY9Gx6Ok_400x400.jpg',
       profileName: 'Claude Code',
       username: 'anthropic',
-      tweetBody: 'Just tested the video generation API and it works perfectly!\n\nThe HMAC authentication is solid and the job polling is smooth. Great work on the architecture!'
+      tweetBody: `Testing the video generation API on remote server!\n\nURL: ${baseUrl}\n\nThe deployment is working great! 🚀`
     };
 
     logInfo('Sample tweet data:');
@@ -281,7 +364,7 @@ async function testVideoGeneration() {
     logInfo(`  Tweet: "${requestBody.tweetBody.substring(0, 50)}..."`);
 
     // Submit video generation request
-    logStep('3/5', 'Submitting request to /generate-video');
+    logStep('4/6', 'Submitting request to /generate-video');
 
     const createResponse = await makeAuthenticatedRequest(
       'POST',
@@ -291,26 +374,26 @@ async function testVideoGeneration() {
 
     logSuccess(`Job created: ${createResponse.jobId}`);
     logInfo(`Status: ${createResponse.status}`);
+    logInfo(`Estimated time: ${createResponse.estimatedCompletionTime || '30-60s'}`);
 
     // Poll for completion
-    logStep('4/5', 'Polling job status');
+    logStep('5/6', 'Polling job status');
 
     const completedJob = await pollJobStatus(createResponse.jobId);
 
     logSuccess('Job completed successfully!');
-    logInfo(`Filename: ${completedJob.result.filename}`);
-    logInfo(`Download URL: ${completedJob.result.downloadUrl}`);
-    logInfo(`File Size: ${formatBytes(completedJob.result.fileSize)}`);
-    logInfo(`Duration: ${completedJob.result.duration}s`);
-    logInfo(`Resolution: ${completedJob.result.resolution}`);
-    logInfo(`Expires At: ${new Date(completedJob.result.expiresAt).toLocaleString()}`);
+    logInfo(`Download URL: ${completedJob.downloadUrl}`);
+    logInfo(`File Size: ${formatBytes(completedJob.fileSize)}`);
+    logInfo(`Duration: ${completedJob.duration}s`);
+    logInfo(`Resolution: ${completedJob.resolution}`);
+    logInfo(`Expires At: ${new Date(completedJob.expiresAt).toLocaleString()}`);
 
     // Download video
-    logStep('5/5', 'Downloading video');
+    logStep('6/6', 'Downloading video');
 
     logInfo(`Saving to: ${OUTPUT_FILE}`);
 
-    const fileSize = await downloadFile(completedJob.result.downloadUrl, OUTPUT_FILE);
+    const fileSize = await downloadFile(completedJob.downloadUrl, OUTPUT_FILE);
 
     logSuccess(`Video downloaded successfully!`);
     logInfo(`File size: ${formatBytes(fileSize)}`);
@@ -320,9 +403,10 @@ async function testVideoGeneration() {
     const totalTime = ((Date.now() - testStartTime) / 1000).toFixed(2);
 
     log('\n' + '='.repeat(60), colors.green);
-    log('  Test Completed Successfully!', colors.bright);
+    log('  Remote Test Completed Successfully!', colors.bright);
     log('='.repeat(60), colors.green);
-    log(`\n${colors.green}Total time: ${totalTime}s${colors.reset}`);
+    log(`\n${colors.green}Remote URL: ${baseUrl}${colors.reset}`);
+    log(`${colors.green}Total time: ${totalTime}s${colors.reset}`);
     log(`${colors.green}Output file: ${OUTPUT_FILE}${colors.reset}\n`);
 
     process.exit(0);
@@ -330,11 +414,30 @@ async function testVideoGeneration() {
   } catch (error) {
     // Print error
     log('\n' + '='.repeat(60), colors.red);
-    log('  Test Failed', colors.bright);
+    log('  Remote Test Failed', colors.bright);
     log('='.repeat(60), colors.red);
     logError(`\n${error.message}\n`);
 
-    if (error.stack) {
+    // Provide helpful debugging info
+    if (error.message.includes('Network Error') || error.message.includes('ECONNREFUSED')) {
+      logWarning('Troubleshooting tips:');
+      log('  • Verify the URL is correct and accessible');
+      log('  • Check if the server is running');
+      log('  • Try accessing the /health endpoint in a browser');
+      log(`  • URL: ${REMOTE_URL}/health\n`);
+    } else if (error.message.includes('401') || error.message.includes('HMAC')) {
+      logWarning('Authentication tips:');
+      log('  • Verify HMAC_SECRET matches the remote server');
+      log('  • Check that the secret is set in Railway environment variables');
+      log('  • Ensure your local .env has the correct secret\n');
+    } else if (error.message.includes('Timeout')) {
+      logWarning('Timeout tips:');
+      log('  • Video generation may take up to 5 minutes');
+      log('  • Check server logs for errors');
+      log('  • Verify the worker is running on the remote server\n');
+    }
+
+    if (error.stack && process.env.NODE_ENV === 'development') {
       log(colors.dim + error.stack + colors.reset);
     }
 

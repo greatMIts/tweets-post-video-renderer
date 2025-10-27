@@ -57,6 +57,28 @@ async function initializeComponents() {
   try {
     console.log('[Server] Initializing components...');
 
+    // Ensure storage directory exists and is writable
+    const storagePath = process.env.STORAGE_PATH || '/data/videos';
+    try {
+      await fs.mkdir(storagePath, { recursive: true, mode: 0o755 });
+      // Test write permissions
+      const testFile = path.join(storagePath, '.write-test');
+      await fs.writeFile(testFile, 'test');
+      await fs.unlink(testFile);
+      console.log('[Server] ✓ Storage directory verified:', storagePath);
+    } catch (error) {
+      console.error('[Server] ⚠️  Storage directory check failed:', error.message);
+      if (error.code === 'EACCES') {
+        console.error('[Server] Permission denied. Using fallback directory...');
+        // Fallback to /tmp for Railway if /data has permission issues
+        process.env.STORAGE_PATH = '/tmp/videos';
+        await fs.mkdir('/tmp/videos', { recursive: true, mode: 0o755 });
+        console.log('[Server] ✓ Using fallback storage:', '/tmp/videos');
+      } else {
+        throw error;
+      }
+    }
+
     // Initialize storage provider
     storage = createDefaultStorageProvider();
     console.log('[Server] ✓ Storage provider initialized');

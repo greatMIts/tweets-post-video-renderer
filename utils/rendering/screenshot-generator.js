@@ -1,5 +1,5 @@
 const puppeteer = require('puppeteer');
-const ChromeDetector = require('../chrome-detector.js');
+const { ChromeDetector } = require('../chrome-detector.js');
 
 /**
  * ScreenshotGenerator - Utility for rendering HTML to PNG screenshots using Puppeteer
@@ -24,7 +24,7 @@ class ScreenshotGenerator {
 
     try {
       // Get launch options from ChromeDetector
-      const baseLaunchOptions = ChromeDetector.createLaunchOptions(true);
+      const baseLaunchOptions = await ChromeDetector.createLaunchOptions(true);
 
       // Enhance launch options with additional args
       const launchOptions = {
@@ -76,7 +76,7 @@ class ScreenshotGenerator {
 
       // Additional wait for rendering to complete
       console.log('[ScreenshotGenerator] Waiting additional 500ms for rendering...');
-      await page.waitForTimeout(500);
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       // Take screenshot
       console.log('[ScreenshotGenerator] Capturing screenshot...');

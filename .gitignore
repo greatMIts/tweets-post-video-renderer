@@ -1,6 +1,5 @@
 # Dependencies
 node_modules/
-package-lock.json
 yarn.lock
 pnpm-lock.yaml
 
@@ -83,13 +82,6 @@ coverage/
 
 # But keep directory structure
 !.gitkeep
-
-# Assets (users must provide their own music)
-assets/background-music.mp3
-assets/background-music.aac
-assets/*.mp3
-assets/*.aac
-assets/*.wav
 
 # Keep assets README
 !assets/README.md

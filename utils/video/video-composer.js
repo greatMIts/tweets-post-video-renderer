@@ -117,11 +117,6 @@ class VideoComposer {
           .input(audioPath)
           // Complex filter chain
           .complexFilter(complexFilter, ['video_out', 'audio_out'])
-          // Map processed streams to output
-          .outputOptions([
-            '-map [video_out]',
-            '-map [audio_out]'
-          ])
           // Video codec settings
           .videoCodec('libx264')
           .outputOptions([

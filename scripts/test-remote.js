@@ -9,8 +9,13 @@
  * 3. Downloading the generated video
  *
  * Usage:
- *   node scripts/test-remote.js <API_URL>
+ *   node scripts/test-remote.js <API_URL> [--interactive]
  *   node scripts/test-remote.js https://your-app.railway.app
+ *   node scripts/test-remote.js https://your-app.railway.app --interactive
+ *   node scripts/test-remote.js https://your-app.railway.app -i
+ *
+ * Flags:
+ *   --interactive, -i    Prompt for tweet data instead of using sample data
  *
  * The HMAC_SECRET must be set in your .env file and match the remote server.
  */
@@ -19,10 +24,13 @@ const axios = require('axios');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const readline = require('readline');
 require('dotenv').config();
 
-// Get URL from command line argument
-const REMOTE_URL = process.argv[2];
+// Parse command line arguments
+const args = process.argv.slice(2);
+const REMOTE_URL = args[0];
+const INTERACTIVE_MODE = args.includes('--interactive') || args.includes('-i');
 
 // Configuration
 const HMAC_SECRET = process.env.HMAC_SECRET;
@@ -276,6 +284,107 @@ function formatBytes(bytes) {
 }
 
 /**
+ * Prompts user for input
+ *
+ * @param {string} question - Question to ask
+ * @param {string} defaultValue - Default value if user presses enter
+ * @returns {Promise<string>} User input
+ */
+function prompt(question, defaultValue = '') {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  return new Promise((resolve) => {
+    const defaultHint = defaultValue ? ` ${colors.dim}(default: ${defaultValue})${colors.reset}` : '';
+    rl.question(`${colors.cyan}?${colors.reset} ${question}${defaultHint}: `, (answer) => {
+      rl.close();
+      resolve(answer.trim() || defaultValue);
+    });
+  });
+}
+
+/**
+ * Prompts user for multiline input (for tweet body)
+ *
+ * @param {string} question - Question to ask
+ * @returns {Promise<string>} User input (multiline)
+ */
+function promptMultiline(question) {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  return new Promise((resolve) => {
+    const lines = [];
+
+    log(`${colors.cyan}?${colors.reset} ${question}`);
+    log(`  ${colors.dim}(Press Ctrl+D or type 'END' on a new line when done)${colors.reset}`);
+
+    rl.on('line', (line) => {
+      if (line.trim() === 'END') {
+        rl.close();
+      } else {
+        lines.push(line);
+      }
+    });
+
+    rl.on('close', () => {
+      resolve(lines.join('\n'));
+    });
+  });
+}
+
+/**
+ * Collects tweet data interactively from user
+ *
+ * @returns {Promise<Object>} Tweet data object
+ */
+async function collectTweetDataInteractively() {
+  log('\n' + colors.bright + 'Interactive Mode - Enter Tweet Data' + colors.reset);
+  log(colors.dim + 'Press Ctrl+C to cancel\n' + colors.reset);
+
+  const theme = await prompt(
+    'Theme (dark/light)',
+    'dark'
+  );
+
+  const profileName = await prompt(
+    'Profile Name',
+    'Test User'
+  );
+
+  const username = await prompt(
+    'Username (without @)',
+    'testuser'
+  );
+
+  const profilePhotoUrl = await prompt(
+    'Profile Photo URL',
+    'https://pbs.twimg.com/profile_images/1590968738358079488/IY9Gx6Ok_400x400.jpg'
+  );
+
+  const tweetBody = await promptMultiline(
+    'Tweet Body'
+  );
+
+  // Validate inputs
+  if (!tweetBody.trim()) {
+    throw new Error('Tweet body cannot be empty');
+  }
+
+  return {
+    theme: theme === 'light' ? 'light' : 'dark',
+    profileName,
+    username,
+    profilePhotoUrl,
+    tweetBody
+  };
+}
+
+/**
  * Tests the health endpoint
  *
  * @returns {Promise<Object>} Health check response
@@ -313,12 +422,15 @@ async function testVideoGeneration() {
     if (!REMOTE_URL) {
       log('\n' + colors.red + 'Error: No URL provided' + colors.reset + '\n');
       log('Usage:');
-      log('  node scripts/test-remote.js <API_URL>');
-      log('  node scripts/test-remote.js https://your-app.railway.app\n');
+      log('  node scripts/test-remote.js <API_URL> [--interactive]');
+      log('  node scripts/test-remote.js https://your-app.railway.app');
+      log('  node scripts/test-remote.js https://your-app.railway.app -i\n');
+      log('Flags:');
+      log('  --interactive, -i    Prompt for custom tweet data\n');
       log('Examples:');
       log('  node scripts/test-remote.js https://my-api.railway.app');
-      log('  node scripts/test-remote.js http://localhost:3000');
-      log('  node scripts/test-remote.js my-api.railway.app  ' + colors.dim + '(will add https://)' + colors.reset);
+      log('  node scripts/test-remote.js https://my-api.railway.app --interactive');
+      log('  node scripts/test-remote.js my-api.railway.app -i  ' + colors.dim + '(will add https://)' + colors.reset);
       log('');
       process.exit(1);
     }
@@ -350,17 +462,25 @@ async function testVideoGeneration() {
     // Create request body with sample tweet data
     logStep('3/6', 'Creating video generation request');
 
-    const requestBody = {
-      theme: 'dark',
-      profilePhotoUrl: 'https://pbs.twimg.com/profile_images/1590968738358079488/IY9Gx6Ok_400x400.jpg',
-      profileName: 'Claude Code',
-      username: 'anthropic',
-      tweetBody: `Testing the video generation API on remote server!\n\nURL: ${baseUrl}\n\nThe deployment is working great! 🚀`
-    };
+    let requestBody;
 
-    logInfo('Sample tweet data:');
+    if (INTERACTIVE_MODE) {
+      requestBody = await collectTweetDataInteractively();
+    } else {
+      requestBody = {
+        theme: 'dark',
+        profilePhotoUrl: 'https://pbs.twimg.com/profile_images/1590968738358079488/IY9Gx6Ok_400x400.jpg',
+        profileName: 'Claude Code',
+        username: 'anthropic',
+        tweetBody: `Testing the video generation API on remote server!\n\nURL: ${baseUrl}\n\nThe deployment is working great! 🚀`
+      };
+    }
+
+    log(''); // Blank line
+    logInfo('Tweet data to submit:');
     logInfo(`  Theme: ${requestBody.theme}`);
     logInfo(`  Profile: ${requestBody.profileName} (@${requestBody.username})`);
+    logInfo(`  Photo URL: ${requestBody.profilePhotoUrl.substring(0, 50)}...`);
     logInfo(`  Tweet: "${requestBody.tweetBody.substring(0, 50)}..."`);
 
     // Submit video generation request

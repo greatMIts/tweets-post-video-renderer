@@ -112,6 +112,76 @@ class TemplateRenderer {
   }
 
   /**
+   * Calculate dynamic font sizes based on tweet length
+   * @param {string} tweetBody - The tweet text content
+   * @returns {Object} Object containing calculated font sizes
+   */
+  calculateDynamicFontSizes(tweetBody) {
+    const length = tweetBody.length;
+    const lineCount = tweetBody.split('\n').length;
+
+    // Estimate total content height needed
+    // Base calculation on both character count and line count
+    const contentScore = length + (lineCount * 50); // Lines add more height
+
+    // Define size breakpoints
+    // Short tweets (< 150 chars): Large text
+    // Medium tweets (150-350 chars): Medium text
+    // Long tweets (> 350 chars): Small text
+
+    let tweetFontSize, nameFontSize, usernameFontSize, timestampFontSize, lineHeight;
+
+    if (contentScore < 200) {
+      // Short tweet - use large sizes
+      tweetFontSize = 52;
+      nameFontSize = 42;
+      usernameFontSize = 36;
+      timestampFontSize = 36;
+      lineHeight = 1.4;
+    } else if (contentScore < 400) {
+      // Medium tweet - scale down
+      tweetFontSize = 44;
+      nameFontSize = 38;
+      usernameFontSize = 32;
+      timestampFontSize = 32;
+      lineHeight = 1.35;
+    } else if (contentScore < 600) {
+      // Long tweet - smaller text
+      tweetFontSize = 36;
+      nameFontSize = 34;
+      usernameFontSize = 28;
+      timestampFontSize = 28;
+      lineHeight = 1.3;
+    } else if (contentScore < 900) {
+      // Very long tweet - very small text
+      tweetFontSize = 30;
+      nameFontSize = 30;
+      usernameFontSize = 26;
+      timestampFontSize = 26;
+      lineHeight = 1.25;
+    } else {
+      // Extremely long tweet - minimum readable size
+      tweetFontSize = 26;
+      nameFontSize = 28;
+      usernameFontSize = 24;
+      timestampFontSize = 24;
+      lineHeight = 1.2;
+    }
+
+    console.log(`[TemplateRenderer] Dynamic sizing: ${length} chars, ${lineCount} lines, score: ${contentScore}`);
+    console.log(`[TemplateRenderer] Font sizes: tweet=${tweetFontSize}px, name=${nameFontSize}px`);
+
+    return {
+      tweetFontSize,
+      nameFontSize,
+      usernameFontSize,
+      timestampFontSize,
+      lineHeight,
+      contentScore
+    };
+  }
+
+  /**
    * Format the current timestamp as "HH:MM · Mon DD, YYYY"
    * @returns {string} Formatted timestamp
    */
@@ -159,6 +229,32 @@ class TemplateRenderer {
       // Generate timestamp
       const timestamp = this.formatTimestamp();
 
+      // Calculate dynamic font sizes based on tweet length
+      const sizes = this.calculateDynamicFontSizes(data.tweetBody);
+
+      // Create dynamic CSS to inject
+      const dynamicStyles = `
+    <style>
+      .tweet-content {
+        font-size: ${sizes.tweetFontSize}px !important;
+        line-height: ${sizes.lineHeight} !important;
+      }
+      .author-name {
+        font-size: ${sizes.nameFontSize}px !important;
+      }
+      .username {
+        font-size: ${sizes.usernameFontSize}px !important;
+      }
+      .tweet-timestamp {
+        font-size: ${sizes.timestampFontSize}px !important;
+      }
+      .verified-badge {
+        width: ${Math.round(sizes.nameFontSize * 1.05)}px !important;
+        height: ${Math.round(sizes.nameFontSize * 1.05)}px !important;
+      }
+    </style>
+  </head>`;
+
       // Replace all placeholders in the template
       let rendered = template;
 
@@ -177,13 +273,16 @@ class TemplateRenderer {
         rendered = rendered.split(placeholder).join(value);
       }
 
+      // Inject dynamic styles before closing </head> tag
+      rendered = rendered.replace('</head>', dynamicStyles);
+
       // Verify all placeholders were replaced
       const remainingPlaceholders = rendered.match(/\{\{[^}]+\}\}/g);
       if (remainingPlaceholders) {
         console.warn(`[TemplateRenderer] Warning: Unreplaced placeholders found: ${remainingPlaceholders.join(', ')}`);
       }
 
-      console.log(`[TemplateRenderer] Template rendered successfully`);
+      console.log(`[TemplateRenderer] Template rendered successfully with dynamic sizing`);
       return rendered;
     } catch (error) {
       console.error(`[TemplateRenderer] Error rendering template:`, error.message);

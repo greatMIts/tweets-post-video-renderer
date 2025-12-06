@@ -45,7 +45,7 @@ class VideoComposer {
    * @param {string} audioPath - Path to the audio file
    * @param {string} outputPath - Path for the output video file
    * @param {Object} options - Composition options
-   * @param {number} [options.duration=5] - Video duration in seconds
+   * @param {number} [options.duration=45] - Video duration in seconds
    * @param {number} [options.width=1080] - Video width in pixels
    * @param {number} [options.height=1920] - Video height in pixels
    * @param {number} [options.fps=30] - Frames per second
@@ -73,7 +73,7 @@ class VideoComposer {
 
     // Set default options
     const config = {
-      duration: options.duration ?? 5,
+      duration: options.duration ?? 45,
       width: options.width ?? 1080,
       height: options.height ?? 1920,
       fps: options.fps ?? 30,
@@ -188,12 +188,14 @@ class VideoComposer {
     // 5. Apply fade out effect
     return [
       `[0:v]scale=${config.width}:${config.height}:force_original_aspect_ratio=decrease`,
-      `pad=${config.width}:${config.height}:(ow-iw)/2:(oh-ih)/2:black`,
-      'setsar=1',
-      'format=yuv420p',
-      `fade=t=in:st=0:d=${config.fadeInDuration}`,
-      `fade=t=out:st=${fadeOutStart}:d=${config.fadeOutDuration}[video_out]`
-    ].join(',');
+  `pad=${config.width}:${config.height}:(ow-iw)/2:(oh-ih)/2:black`,
+  'setsar=1',
+  'format=yuv420p',
+  // Slow ken-burns zoom-in over the full duration
+  'zoompan=z=\'if(lte(zoom,1.0),1.5,max(1.0,zoom-0.0015))\':d=1+x=iw/2-(iw/zoom)/2:y=ih/2-(ih/zoom)/2',
+  `fade=t=in:st=0:d=${config.fadeInDuration}`,
+  `fade=t=out:st=${fadeOutStart}:d=${config.fadeOutDuration}[video_out]`
+].join(',');
   }
 
   /**

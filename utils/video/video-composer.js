@@ -117,7 +117,12 @@ class VideoComposer {
         const command = ffmpeg()
           .input(backgroundPath) // 0: looping steak background
           .input(screenshotPath) // 1: tweet screenshot
-          .inputOptions(['-loop 1', '-framerate', config.fps.toString()]) // force screenshot as looped video with framerate
+          .inputOptions([
+            '-loop 1',
+            '-framerate', config.fps.toString(),
+            '-pix_fmt yuv420p',  // force compatible pixel format
+            '-vf', 'format=yuv420p'  // strip alpha and weird profiles
+          ]) // safe static image input
           .complexFilter(filterString)
           .map('[v]')
           // no music, no audio map - silent video for now

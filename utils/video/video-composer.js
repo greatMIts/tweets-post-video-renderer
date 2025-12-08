@@ -59,11 +59,11 @@ class VideoComposer {
     if (!this.initialized) {
       throw new Error('VideoComposer not initialized. Call initialize() first.');
     }
-
     // Validate required parameters
     if (!screenshotPath || typeof screenshotPath !== 'string') {
       throw new Error('Invalid screenshotPath: must be a non-empty string');
     }
+    // audioPath is currently unused (we have no TTS yet) – keep the check for now
     if (!audioPath || typeof audioPath !== 'string') {
       throw new Error('Invalid audioPath: must be a non-empty string');
     }
@@ -88,83 +88,74 @@ class VideoComposer {
     console.log('[VideoComposer] Starting video composition...');
     console.log('[VideoComposer] Configuration:', {
       screenshot: screenshotPath,
-      audio: audioPath,
       output: outputPath,
       ...config
     });
 
     return new Promise((resolve, reject) => {
       try {
-        // Calculate fade timings
         const fadeOutStart = config.duration - config.fadeOutDuration;
 
-        // Build complex filter for video and audio processing
-        const videoFilter = this._buildVideoFilter(config, fadeOutStart);
-        const audioFilter = this._buildAudioFilter(config, fadeOutStart);
-        const complexFilter = `${videoFilter};${audioFilter}`;
+        // Hardcoded carnivore assets – update filenames if yours differ
+        const backgroundPath = './assets/mixkit-steak-on-the-grill-with-black-background-47825-hd-ready.mp4';
+        const musicPath = './assets/unknown-moments-dark-ambient-297679.mp3';
 
-        console.log('[VideoComposer] FFmpeg complex filter:', complexFilter);
+        // Full filter chain: loop background + overlay zoomed tweet + quiet music
+        const filterString = [
+          `[0:v]loop=loop=-1:size=1:start=0[vbg]`,                                                                 // force background to loop forever
+          `[vbg][1:v]overlay=0:0:format=auto,` +
+          `scale=${config.width}:${config.height}:force_original_aspect_ratio=decrease,` +
+          `pad=${config.width}:${config.height}:(ow-iw)/2:(oh-ih)/2:black,` +
+          `setsar=1,format=yuv420p,` +
+          `zoompan=z='if(lte(zoom,1.0),1.5,max(1.0,zoom-0.0015))':d=1+x=iw/2-(iw/zoom)/2:y=ih/2-(ih/zoom)/2,` +
+          `fade=t=in:st=0:d=${config.fadeInDuration},` +
+          `fade=t=out:st=${fadeOutStart}:d=${config.fadeOutDuration}[v]`,                                          // video output
+          `[2:a]volume=0.15[a]`                                                                                    // quiet music (15%)
+        ].join(';');
 
-        // Create FFmpeg command
+        console.log('[VideoComposer] FFmpeg complex filter:', filterString);
+
         const command = ffmpeg()
-          // Input 1: Screenshot (loop mode)
-          .input(screenshotPath)
-          .inputOptions([
-            '-loop 1',
-            '-framerate', config.fps.toString()
-          ])
-          // Input 2: Audio file
-          .input(audioPath)
-          // Complex filter chain
-          .complexFilter(complexFilter, ['video_out', 'audio_out'])
-          // Video codec settings
+          .input(backgroundPath)                               // 0: looping steak background
+          .input(screenshotPath)                               // 1: tweet screenshot
+          .inputOptions(['-framerate', config.fps.toString()]) // needed for zoompan on static image
+          .input(musicPath)                                    // 2: subtle music
+          .complexFilter(filterString)
+          .map('[v]')
+          .map('[a]')
           .videoCodec('libx264')
           .outputOptions([
             '-preset medium',
             '-crf 23',
             '-pix_fmt yuv420p'
           ])
-          // Audio codec settings
           .audioCodec('aac')
           .audioBitrate('128k')
-          // Output duration
-          .duration(config.duration)
-          // Optimize for streaming (move moov atom to beginning)
+          .duration(config.duration)                           // 45s for now
           .outputOptions('-movflags +faststart')
-          // Output file
           .output(outputPath);
 
-        // Log the full FFmpeg command
+        // The rest of the event handlers stay exactly the same
         command.on('start', (commandLine) => {
           console.log('[VideoComposer] Executing FFmpeg command:', commandLine);
         });
-
-        // Track progress
         command.on('progress', (progress) => {
           const percent = progress.percent ? progress.percent.toFixed(2) : '0.00';
           const timemark = progress.timemark || '00:00:00.00';
           console.log(`[VideoComposer] Progress: ${percent}% (${timemark})`);
         });
-
-        // Handle errors
         command.on('error', (error, stdout, stderr) => {
           console.error('[VideoComposer] FFmpeg error:', error.message);
-          if (stderr) {
-            console.error('[VideoComposer] FFmpeg stderr:', stderr);
-          }
+          if (stderr) console.error('[VideoComposer] FFmpeg stderr:', stderr);
           reject(new Error(`Video composition failed: ${error.message}`));
         });
-
-        // Handle completion
-        command.on('end', (stdout, stderr) => {
+        command.on('end', () => {
           console.log('[VideoComposer] Video composition completed successfully');
           console.log('[VideoComposer] Output file:', outputPath);
           resolve(outputPath);
         });
 
-        // Run the command
         command.run();
-
       } catch (error) {
         console.error('[VideoComposer] Composition setup failed:', error.message);
         reject(new Error(`Failed to setup video composition: ${error.message}`));

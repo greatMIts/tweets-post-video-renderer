@@ -108,9 +108,8 @@ class VideoComposer {
           `scale=${config.width}:${config.height}:force_original_aspect_ratio=decrease,` +
           `pad=${config.width}:${config.height}:(ow-iw)/2:(oh-ih)/2:black,` +
           `setsar=1,` +
-          `zoompan=z="if(lte(zoom,1.0),1.5,max(1.0,zoom-0.0015))":d=1:x=iw/2-(iw/zoom)/2:y=ih/2-(ih/zoom)/2,` +
           `fade=t=in:st=0:d=${config.fadeInDuration},` +
-          `fade=t=out:st=${fadeOutStart}:d=${config.fadeOutDuration}[v]`  // ← no + here, last item
+          `fade=t=out:st=${fadeOutStart}:d=${config.fadeOutDuration}[v]`
         ].join(';');
 
         console.log('[VideoComposer] FFmpeg complex filter:', filterString);

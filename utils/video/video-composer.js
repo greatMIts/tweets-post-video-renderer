@@ -97,7 +97,7 @@ class VideoComposer {
         const fadeOutStart = config.duration - config.fadeOutDuration;
 
         // Hardcoded carnivore assets – update filenames if yours differ
-        const backgroundPath = './assets/mixkit-sizzling-steak-being-seared-on-a-fiery-grill-45723-hd-ready.mp4';
+        const backgroundPath = './assets/carnivore-bg-fixed.mp4';
         const musicPath = './assets/unknown-moments-dark-ambient-297679.mp3';
 
         // Full filter chain: loop background + overlay zoomed tweet + quiet music

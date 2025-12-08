@@ -257,7 +257,7 @@ class VideoGenerationWorker {
       // Generate video
       videoPath = `/tmp/${jobId}-video.mp4`;
       await videoComposer.compose(screenshotPath, this.audioPath, videoPath, {
-        duration: 86400,
+        duration: 3600,
         width: 1080,
         height: 1920,
         fps: 30,
@@ -289,7 +289,7 @@ class VideoGenerationWorker {
       const saveResult = await this.storageProvider.save(filename, videoBuffer, {
         jobId,
         contentType: 'video/mp4',
-        duration: 86400,  // 24 hours - plenty of time to download
+        duration: 3600,  // 1 hour - plenty of time to download
         resolution: '1080x1920',
       });
 
@@ -312,7 +312,7 @@ class VideoGenerationWorker {
         downloadUrl,
         expiresAt,
         fileSize,
-        duration: 86400,
+        duration: 3600,
         resolution: '1080x1920',
       });
 

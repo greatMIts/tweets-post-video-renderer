@@ -66,7 +66,7 @@ class VideoGenerationWorker {
     this.processingJobs = new Set(); // Track jobs currently being processed
 
     // Get storage TTL from environment
-    this.storageTtlHours = parseInt(process.env.STORAGE_TTL_HOURS || '24', 10);
+    this.storageTtlHours = parseInt(process.env.STORAGE_TTL_HOURS || '1', 10); // 1 hour = 3600 seconds
 
     // Get base URL for download URLs
     this.baseUrl = process.env.BASE_URL || 'http://localhost:3000';

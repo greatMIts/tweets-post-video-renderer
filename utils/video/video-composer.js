@@ -102,15 +102,14 @@ class VideoComposer {
 
         // Full filter chain: loop background + overlay zoomed tweet + quiet music
         const filterString = [
-          `[0:v]loop=loop=-1:size=1:start=0[vbg]`,                                      // loop background forever
-          `[vbg][1:v]overlay=0:0:format=auto,` +                                        // overlay tweet screenshot on background
+          '[0:v]loop=loop=-1:size=1:start=0[vbg]',
+          '[vbg][1:v]overlay=0:0:format=auto,' +
           `scale=${config.width}:${config.height}:force_original_aspect_ratio=decrease,` +
           `pad=${config.width}:${config.height}:(ow-iw)/2:(oh-ih)/2:black,` +
           `setsar=1,format=yuv420p,` +
           `zoompan=z='if(lte(zoom,1.0),1.5,max(1.0,zoom-0.0015))':d=1+x=iw/2-(iw/zoom)/2:y=ih/2-(ih/zoom)/2,` +
           `fade=t=in:st=0:d=${config.fadeInDuration},` +
-          `fade=t=out:st=${fadeOutStart}:d=${config.fadeOutDuration}[v]`,               // final video output
-          `[2:a]volume=0.15[a]`                                                         // quiet music
+          `fade=t=out:st=${fadeOutStart}:d=${config.fadeOutDuration}[v]`
         ].join(';');
 
         console.log('[VideoComposer] FFmpeg complex filter:', filterString);
@@ -119,10 +118,9 @@ class VideoComposer {
           .input(backgroundPath) // 0: looping steak background
           .input(screenshotPath) // 1: tweet screenshot
           .inputOptions(['-framerate', config.fps.toString()]) // applies to screenshot for zoompan
-          .input(musicPath) // 2: subtle music
           .complexFilter(filterString)
           .map('[v]')
-          .map('[a]')
+          // no music, no audio map - silent video for now
           .videoCodec('libx264')
           .outputOptions([
             '-preset medium',

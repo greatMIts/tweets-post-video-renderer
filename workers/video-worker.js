@@ -289,7 +289,7 @@ class VideoGenerationWorker {
       const saveResult = await this.storageProvider.save(filename, videoBuffer, {
         jobId,
         contentType: 'video/mp4',
-        duration: 5,
+        duration: 86400,  // 24 hours - plenty of time to download
         resolution: '1080x1920',
       });
 

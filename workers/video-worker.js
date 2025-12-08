@@ -257,7 +257,7 @@ class VideoGenerationWorker {
       // Generate video
       videoPath = `/tmp/${jobId}-video.mp4`;
       await videoComposer.compose(screenshotPath, this.audioPath, videoPath, {
-        duration: 5,
+        duration: 86400,
         width: 1080,
         height: 1920,
         fps: 30,
@@ -312,7 +312,7 @@ class VideoGenerationWorker {
         downloadUrl,
         expiresAt,
         fileSize,
-        duration: 5,
+        duration: 86400,
         resolution: '1080x1920',
       });
 
